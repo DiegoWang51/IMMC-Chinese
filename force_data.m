@@ -1,0 +1,111 @@
+clear;
+clc;
+
+Pos = xlsread('Charging.xlsx');
+station_x = Pos(:,1);
+station_y = 700 - Pos(:,2);
+demand_x = Pos(:, 3);
+demand_y = 700 - Pos(:, 4);
+
+city = findPattern();
+stationSituation = xlsread('final_result.xlsx');
+
+% calculate potential, called 'force' for each station,
+% which is the willingness to give several cars away
+for i = 1:968 % for every situation
+    for j = 1:10 % for each charging station
+        
+        % number of cars extra and potential money to be saved
+        [diff,money,force,level] = level_dif(stationSituation(i,j));
+        Force(i,j).dif = diff;
+        Force(i,j).money = money;
+        Force(i,j).force = force;
+        Force(i,j).level = level;
+        Force(i,j).pos_x = station_x(j);
+        Force(i,j).pos_y = station_y(j);
+        Force(i,j).numOfCars = stationSituation(i,j);
+        Force(i,j).carDistribution = city(i,j).i;
+        
+    end
+end
+
+const_attraction = 1;
+
+% adjust car assignment with Force and distance
+
+for i = 1:968 % for every situation
+    
+    for iteration = 1:5
+        
+        for f1 = 1 : 9 % the first station
+            for f2 = f1+1 : 10 % the second station
+                
+                if Force(i,f1).numOfCars == 100000 || Force(i,f2).numOfCars == 100000
+                    continue;
+                end
+                
+                delta_force = Force(i,f1).force - Force(i,f2).force;
+                distF = getDist(Force(i,f1).pos_x, Force(i,f1).pos_y, Force(i,f2).pos_x, Force(i,f2).pos_y);
+                attraction = round((delta_force / distF^2) * const_attraction);
+                Force(i,f1).numOfCars = Force(i,f1).numOfCars - attraction;
+                Force(i,f2).numOfCars = Force(i,f2).numOfCars + attraction;
+                
+                minDist = 100000;
+                demandIndex = 0;
+                if attraction > 0
+                    for demandNum = 1:30
+                        dist = getDist(Force(i,f2).pos_x, Force(i,f2).pos_y, demand_x(demandNum), demand_y(demandNum));
+                        if dist < minDist && Force(i,f1).carDistribution(demandNum) ~= 0 % could be put before dist
+                            dist = minDist;
+                            demandIndex = demandNum;
+                        end
+                    end
+                    Force(i,f1).carDistribution(demandIndex) = Force(i,f1).carDistribution(demandIndex) - attraction;
+                    Force(i,f2).carDistribution(demandIndex) = Force(i,f2).carDistribution(demandIndex) + attraction;
+                elseif attraction <= 0
+                    for demandNum = 1:30
+                        dist = getDist(Force(i,f1).pos_x, Force(i,f1).pos_y, demand_x(demandNum), demand_y(demandNum));
+                        if dist < minDist && Force(i,f2).carDistribution(demandNum) ~= 0 % could be put before dist
+                            minDist = dist;
+                            demandIndex = demandNum;
+                        end
+                    end
+                    Force(i,f1).carDistribution(demandIndex) = Force(i,f1).carDistribution(demandIndex) - attraction;
+                    Force(i,f2).carDistribution(demandIndex) = Force(i,f2).carDistribution(demandIndex) + attraction;
+                end
+                
+                [Force(i,f1).dif, Force(i,f1).money, Force(i,f1).force, Force(i,f1).level] = level_dif(Force(i,f1).numOfCars);
+                [Force(i,f2).dif, Force(i,f2).money, Force(i,f2).force, Force(i,f2).level] = level_dif(Force(i,f2).numOfCars);
+            end
+        end
+        
+    end
+    
+end
+
+i = 1;
+while i <= size(Force, 1)
+    for j = 1:10
+        if Force(i,j).numOfCars > 350 && Force(i,j).numOfCars < 100000
+            Force(i,:) = [];
+            i = i - 1;
+            break;
+        end
+    end
+    i = i + 1;
+end
+
+allSum = getSum(Force)';
+[minCost, minIndex] = min(allSum, [], 1);
+optimal = Force(minIndex, :);
+
+a = Force(:,1);
+b = Force(:,2);
+c = Force(:,3);
+d = Force(:,4);
+e = Force(:,5);
+f = Force(:,6);
+g = Force(:,7);
+h = Force(:,8);
+i = Force(:,9);
+j = Force(:,10);
